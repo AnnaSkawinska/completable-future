@@ -1,0 +1,1 @@
+Playground for playing with Java8's CompletableFuture
