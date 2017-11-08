@@ -1,11 +1,15 @@
 package pl.askawinska;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -14,11 +18,13 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import pl.askawinska.rest.RestJoker;
+import pl.askawinska.rest.WordGenerator;
 
 @SpringBootApplication
 public class Application {
 
 	protected RestJoker restJoker;
+	protected WordGenerator wordGenerator;
 
 	public static void main(String args[]) {
 		new SpringApplicationBuilder(Application.class).web(false).run();
@@ -30,18 +36,30 @@ public class Application {
 	}
 
 	@Bean
-	public CommandLineRunner run(RestJoker restJoker) throws Exception {
+	public CommandLineRunner run(RestJoker restJoker, WordGenerator wordGenerator) throws Exception {
 		this.restJoker = restJoker;
+		this.wordGenerator = wordGenerator;
 
 		return args -> {
-			manualAsync();
+//			manualAsync();
 //			supplyAsync();
 //			separateThread();
 //			kamilWasRight();
 //			exceptionHandling();
 //			anyOf();
-//			allOf(); //TODO
+//			allOf();
+
+			// running tasks one after another:
+
+			// different return type:
+//			thenApply();
+
+			//same return type:
+//			thenCompose();
+
+			// void return type, wtf:
 //			thenAcceptBoth();
+			thenAcceptBothDifferent();
 //			applyToEither();
 //			anyCompleteWithStreams();
 		};
@@ -133,21 +151,56 @@ public class Application {
 	}
 
 	protected void anyOf() throws ExecutionException, InterruptedException {
-		CompletableFuture<String> one = restJoker.joke("Joanna", "Elastic");
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 		System.out.println(CompletableFuture.anyOf(one, two, three).get());
 	}
 
 	protected void allOf() throws ExecutionException, InterruptedException {
-		CompletableFuture<String> one = restJoker.joke("Joanna", "Elastic");
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 		System.out.println(CompletableFuture.allOf(one, two, three).get());
+		// not quite what we expected
+	}
+
+	protected void thenApply() throws ExecutionException, InterruptedException {
+		Stopwatch timer = Stopwatch.createStarted();
+
+		CompletableFuture<String> thinking = CompletableFuture.supplyAsync( () -> {
+			System.out.println("-- I'm thinking... --");
+			Sleeper.sleep(3000);
+			System.out.println("-- Enough thinking. --");
+			return "2 + 2 = 4";
+		});
+
+		CompletableFuture<List<Object>> understading = thinking.thenApply(s -> {
+			System.out.println("- I'm  trying to understand...");
+			Sleeper.sleep(4000);
+			System.out.println("-- Enough understanding. --");
+			return ImmutableList.of(s, "understood");
+		});
+
+
+		// Async - the big wtf
+		///  The methods without the Async postfix run the next execution stage using a calling thread.
+		//   The Async method without the Executor argument runs a step using the common fork/join po
+
+		System.out.println("STILL THINKING?");
+		System.out.println(understading.get());
+		System.out.println("all took: " + timer.elapsed(TimeUnit.SECONDS));
+	}
+
+	protected void thenCompose() throws ExecutionException, InterruptedException {
+		CompletableFuture<String> word = wordGenerator.generate();
+		CompletableFuture<String> composed = word.thenCompose(w -> restJoker.joke(w, w));
+
+		System.out.println(composed.get());
 	}
 
 	protected void thenAcceptBoth() throws ExecutionException, InterruptedException {
-		CompletableFuture<String> one = restJoker.joke("Joanna", "Elastic");
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 
@@ -166,8 +219,26 @@ public class Application {
 
 	}
 
+	protected void thenAcceptBothDifferent() throws ExecutionException, InterruptedException {
+		CompletableFuture<String> joke = restJoker.joke("Jolanta", "Elastic");
+		CompletableFuture<String> word = wordGenerator.generate();
+
+		joke.thenAcceptBoth(word, (j, w) -> {
+			System.out.println(j);
+			System.out.println("+");
+			System.out.println(w);
+			System.out.println("=");
+			String[] words = j.split(" ");
+			Random random = new Random();
+			int randomIndex = random.nextInt(words.length);
+			words[randomIndex] = (String) w;
+			System.out.println(Stream.of(words).collect(Collectors.joining(" ")));
+		}).get();
+
+	}
+
 	protected void applyToEither() throws ExecutionException, InterruptedException {
-		CompletableFuture<String> one = restJoker.joke("Joanna", "Elastic");
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 		System.out.println(
@@ -177,7 +248,7 @@ public class Application {
 	}
 
 	protected void anyCompleteWithStreams() {
-		CompletableFuture<String> one = restJoker.joke("Joanna", "Elastic");
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 		System.out.println(Stream.of(two, three, one).map(CompletableFuture::join).findAny().get());

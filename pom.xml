@@ -8,7 +8,7 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
-	<name>completablefuture</name>
+	<name>completable-future</name>
 	<description>Demo project for Spring Boot</description>
 
 	<parent>
@@ -61,6 +61,5 @@
 			</plugin>
 		</plugins>
 	</build>
-
 
 </project>
