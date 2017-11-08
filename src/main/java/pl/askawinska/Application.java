@@ -41,13 +41,14 @@ public class Application {
 		this.wordGenerator = wordGenerator;
 
 		return args -> {
-//			manualAsync();
+			manualAsync();
 //			supplyAsync();
 //			separateThread();
 //			kamilWasRight();
 //			exceptionHandling();
 //			anyOf();
 //			allOf();
+//			allOfWithStreams();
 
 			// running tasks one after another:
 
@@ -59,9 +60,11 @@ public class Application {
 
 			// void return type, wtf:
 //			thenAcceptBoth();
-			thenAcceptBothDifferent();
+//			thenAcceptBothDifferent();
 //			applyToEither();
 //			anyCompleteWithStreams();
+//			chainingSyncAndAsync();
+
 		};
 	}
 
@@ -129,7 +132,7 @@ public class Application {
 			System.out.println("I believe I can fly!");
 		};
 
-		CompletableFuture<Void> async = CompletableFuture.runAsync(runnable);
+		CompletableFuture.runAsync(runnable);
 
 		System.out.println(String.format("Did it fly?"));
 	}
@@ -154,15 +157,42 @@ public class Application {
 		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
-		System.out.println(CompletableFuture.anyOf(one, two, three).get());
+
+		CompletableFuture<Object> someJoke = CompletableFuture.anyOf(one, two, three);
+
+		System.out.println(someJoke.isDone());
+		Sleeper.sleep(5000);
+		System.out.println(someJoke.isDone());
+		System.out.println(someJoke.get());
+		System.out.println(someJoke.isDone());
+		System.out.println(someJoke.get());
+		System.out.println(someJoke.isDone());
+		System.out.println(someJoke.get());
 	}
 
 	protected void allOf() throws ExecutionException, InterruptedException {
 		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
 		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
-		System.out.println(CompletableFuture.allOf(one, two, three).get());
+
+		System.out.println(CompletableFuture.allOf(one, two, three));
 		// not quite what we expected
+
+		// hacking the system:
+		CompletableFuture<String> allOf = CompletableFuture.allOf(one, two, three)
+				.thenApply(ignoredVoid -> one.join() + two.join() + three.join());
+		System.out.println(allOf.get());
+	}
+
+	protected void allOfWithStreams() throws ExecutionException, InterruptedException {
+		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
+		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
+		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
+
+		String threeJokes = Stream.of(one, two, three)
+				.map(CompletableFuture::join)
+				.collect(Collectors.joining("\n"));
+		System.out.println(threeJokes);
 	}
 
 	protected void thenApply() throws ExecutionException, InterruptedException {
@@ -181,11 +211,6 @@ public class Application {
 			System.out.println("-- Enough understanding. --");
 			return ImmutableList.of(s, "understood");
 		});
-
-
-		// Async - the big wtf
-		///  The methods without the Async postfix run the next execution stage using a calling thread.
-		//   The Async method without the Executor argument runs a step using the common fork/join po
 
 		System.out.println("STILL THINKING?");
 		System.out.println(understading.get());
@@ -243,16 +268,59 @@ public class Application {
 		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
 		System.out.println(
 				two.applyToEither(one, s -> s)
-						.applyToEither(three, s -> s).get());
-
+						.applyToEither(three, s -> s)
+						.get());
 	}
 
 	protected void anyCompleteWithStreams() {
-		CompletableFuture<String> one = restJoker.joke("Jolanta", "Elastic");
-		CompletableFuture<String> two = restJoker.joke("Anna", "Skawinska");
-		CompletableFuture<String> three = restJoker.joke("Krolowa", "Sucharow");
-		System.out.println(Stream.of(two, three, one).map(CompletableFuture::join).findAny().get());
+		CompletableFuture<String> one = CompletableFuture.supplyAsync(() -> {
+			Sleeper.sleep(1000);
+			System.out.println("one");
+				return "one";
+		} );
+
+		CompletableFuture<String> two = CompletableFuture.supplyAsync(() -> {
+			Sleeper.sleep(2000);
+			System.out.println("two");
+			return "two";
+		} );
+
+
+		System.out.println(Stream.of(one, two)
+				.parallel()
+				.map(CompletableFuture::join)
+				.findFirst()
+				.get());
 		/// always the first in stream is first!
+	}
+
+
+	protected void chainingSyncAndAsync() throws ExecutionException, InterruptedException {
+		System.out.println("Main thread: " + Thread.currentThread().getName());
+
+		CompletableFuture<String> chain = CompletableFuture.supplyAsync(() -> {
+			System.out.println("-- starting: one " + Thread.currentThread().getId());
+			Sleeper.sleep(1000);
+			System.out.println("-- ending: one");
+			return "one";
+		}).thenApply(s -> {
+			System.out.println("-- starting: two --" + Thread.currentThread().getId());
+			Sleeper.sleep(2000);
+			System.out.println("-- ending: two --");
+			return "two";
+		}).thenApplyAsync(s -> {
+			System.out.println("-- starting: async --" + Thread.currentThread().getId());
+			Sleeper.sleep(2000);
+			System.out.println("-- ending: async --");
+			return "async";
+		}).thenApply(s -> {
+			System.out.println("-- starting: four --" + Thread.currentThread().getId());
+			Sleeper.sleep(2000);
+			System.out.println("-- ending: four --");
+			return "four";
+		});
+
+		Thread.sleep(10000);
 	}
 
 }
